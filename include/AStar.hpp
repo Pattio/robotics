@@ -46,6 +46,8 @@ namespace AStar {
         bool obstacleExists(const Position &position);
         Position transformMapPositionToGridPosition(const PositionMap &positionInMap);
         
+        std::vector<signed char> getFlattenedMap();
+
         int height, width;
         PositionMap origin;
         double cellResolution;

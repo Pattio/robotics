@@ -71,12 +71,63 @@ void Map::debugMap() {
     }
 }
 
-void Map::inflateObsticles(int radius) {
-    std::vector<std::vector<int>> newMap = mapVector;
+std::vector<signed char> Map::getFlattenedMap() {
+    std::vector<signed char> flattened;
     for(int i = 0; i < height; i++) {
         for(int j = 0; j < width; j++) {
-            // Find cell which is not empty
+            flattened.push_back(mapVector.at(i).at(j));
+        }
+    }
+    return flattened;
+}
+
+void Map::inflateObsticles(int radius) {
+    std::vector<std::vector<int>> newMap = mapVector;
+    // int inflateExceptions[width];
+    for(int i = 0; i < height; i++) {
+        for(int j = 0; j < width; j++) {
+            // Find cell which is not empty and 
             if(mapVector.at(i).at(j) != emptyCell) {
+
+                // Check that neighbour pixels exists
+                if((i-1 > 0) && (i+1 < height -1) && (j-1 > 0) && (j+1 < width -1)) {
+                    // Don't inflate pixels that have all neighbours
+                    if(mapVector.at(i).at(j-1) != emptyCell &&
+                        mapVector.at(i).at(j+1) != emptyCell &&
+                        mapVector.at(i-1).at(j) != emptyCell &&
+                        mapVector.at(i+1).at(j) != emptyCell) {
+                        continue;
+                    }
+                }
+
+                
+                // TODO: CHANGE HARDCODED VALUE (robot size takes 8 pixels)
+                int inflationFromBothSidesSize = radius * 2 + 8;
+    
+
+                if(i + inflationFromBothSidesSize < height - 1 &&
+                    j - inflationFromBothSidesSize > 0 &&
+                    mapVector.at(i + 1).at(j) == emptyCell && 
+                    mapVector.at(i + inflationFromBothSidesSize).at(j - inflationFromBothSidesSize) != emptyCell) {
+                    // inflate by half of robot size 
+                    continue;
+                }
+
+                if(i + inflationFromBothSidesSize < height - 1 &&
+                    mapVector.at(i + 1).at(j) == emptyCell && 
+                    mapVector.at(i + inflationFromBothSidesSize).at(j) != emptyCell) {
+                    // inflateExceptions[j] = i;
+                    // inflate by half of robot size 
+                    continue;
+                }
+
+                if(i - inflationFromBothSidesSize > 0 &&
+                    mapVector.at(i - 1).at(j) == emptyCell && 
+                    mapVector.at(i - inflationFromBothSidesSize).at(j) != emptyCell) {
+                    continue;
+                }
+
+
                 // Find top left and bottom right corners
                 int topLeftX = (j - radius < 0) ? 0 : j - radius;
                 int topLeftY = (i - radius < 0) ? 0 : i - radius;

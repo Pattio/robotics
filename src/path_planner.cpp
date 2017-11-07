@@ -9,6 +9,7 @@ Marker *marker;
 AStar::Map *myMap;
 AStar::AStarAlgorithm *algorithm;
 ros::Publisher move_publisher;
+ros::Publisher map_publisher;
 
 std::vector<std::vector<double>> goals;
 std::vector<AStar::Position> paths[5];
@@ -44,17 +45,27 @@ void findPath(AStar::Position start, AStar::Position end, int pathIndex) {
 	drawMarkersForPath(paths[pathIndex]);
 }
 
-void readOccupancyGrid(const nav_msgs::OccupancyGrid::ConstPtr& msg) {
+// TODO: REVERT BACK AFTER TESTING const nav_msgs::OccupancyGrid::ConstPtr& msg
+void readOccupancyGrid(const nav_msgs::OccupancyGrid msg) {
 
     // Get map origin
-    AStar::PositionMap mapOrigin(msg->info.origin.position.x, msg->info.origin.position.y);
+    AStar::PositionMap mapOrigin(msg.info.origin.position.x, msg.info.origin.position.y);
     // Cast occupancy grid to int vector
-    std::vector<int> grid(msg->data.begin(), msg->data.end());
+    std::vector<int> grid(msg.data.begin(), msg.data.end());
     // Create map object with all the information
-	myMap = new AStar::Map(msg->info.height, msg->info.width, grid, 0, mapOrigin, msg->info.resolution);
+	myMap = new AStar::Map(msg.info.height, msg.info.width, grid, 0, mapOrigin, msg.info.resolution);
 	// Inflate all obsticles by half of robot hypotenuse size (should be 14/1.2 = 11.7)
+	// myMap->inflateObsticles(8);
 	myMap->inflateObsticles(8);
 	
+
+	nav_msgs::OccupancyGrid gridCopy = msg;
+	// int p[] = {100, 100, 50, 0};
+	// std::vector<signed char> a(p, p+4);
+	// gridCopy.data = a;
+	gridCopy.data = myMap->getFlattenedMap();
+	map_publisher.publish(gridCopy);
+
 	
 	// Create 5 threads for each of the goals
 	std::thread threads[5];
@@ -79,7 +90,9 @@ void readOccupancyGrid(const nav_msgs::OccupancyGrid::ConstPtr& msg) {
 
 	// Publish waypoints to driver after path is planned
 	publishWaypoints();
+	
 	ROS_INFO("DONE");
+	exit(-1);
 }
 
 void readParameters(ros::NodeHandle nh) {
@@ -127,13 +140,13 @@ int main(int argc, char **argv) {
 	marker = new Marker(nh, "path", "map");
 	// Create publisher which publishes waypoints to driver
 	move_publisher = nh.advertise<geometry_msgs::PoseArray>("/drive_waypoints", 1);
+	map_publisher = nh.advertise<nav_msgs::OccupancyGrid>("/map", 1);
 	// Read parameters
 	readParameters(nh);
 
 	// Use wait for message (practical)
 	// rospy.wait_for_message(’/map’,OccupancyGrid,timeout=None)
 	ros::Subscriber sub = nh.subscribe("map", 1000, &readOccupancyGrid);
-
 	ros::spin();
 	
 	// Clean memory
