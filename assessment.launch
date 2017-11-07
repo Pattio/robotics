@@ -1,0 +1,14 @@
+<launch>
+  <param name="/use_sim_time" value="true"/>
+  <rosparam param="robot_start">[-4.8,-3.6,0]</rosparam>
+  <rosparam param="goal0">[-2,-2]</rosparam> <!-- easy -->
+  <rosparam param="goal1">[2.5,-4.15]</rosparam> <!-- a bit harder -->
+  <rosparam param="goal2">[-2.55,3.13]</rosparam> <!-- same as above -->
+  <rosparam param="goal3">[4.5,-3.5]</rosparam>  <!-- much harder -->
+  <rosparam param="goal4">[5.15,2]</rosparam> <!-- very hard -->
+  <node name="map_server" pkg="map_server" type="map_server" args="$(find cs3027)/map/map.yaml" />
+  <node name="stage" pkg="stage_ros" type="stageros" args="$(find cs3027)/map/map.world" />
+<!--  <node name="dummy_localization" pkg="dummy_localization" type="dummy_localization"/>  -->
+  <node name="dummy_localization" pkg="dummy_localization" type="dummy_localization.py"/>  
+  <node name="add_gaussian_noise" pkg="add_gaussian_noise" type="addGaussianNoise.py"/>
+</launch>
