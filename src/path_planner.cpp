@@ -11,6 +11,8 @@ AStar::AStarAlgorithm *algorithm;
 std::vector<std::vector<double>> goals;
 std::vector<AStar::Position> paths[5];
 
+std::vector<AStar::Position> extractWaypoints(std::vector<AStar::Position> path);
+
 void drawMarkersForPath(const std::vector<AStar::Position> &path) {
 	geometry_msgs::Pose pose;
 	for(auto &position : path) {
@@ -21,9 +23,21 @@ void drawMarkersForPath(const std::vector<AStar::Position> &path) {
 	marker->draw();
 }
 
+void drawWaypointsForPath(const std::vector<AStar::Position> &path) {
+	geometry_msgs::Pose pose;
+	for(auto &position : path) {
+		pose.position.x = myMap->origin.x + position.x * myMap->cellResolution;
+		pose.position.y = myMap->origin.y + position.y * myMap->cellResolution;
+		marker->addWaypoint(pose);
+	}
+	marker->draw();
+}
+
 void findPath(AStar::Position start, AStar::Position end, int pathIndex) {
 	std::cout << "path planning started" << std::endl;
 	paths[pathIndex] = algorithm->findPath(start, end);
+	std::vector<AStar::Position> waypoints = extractWaypoints(paths[pathIndex]);
+	drawWaypointsForPath(waypoints);
 	drawMarkersForPath(paths[pathIndex]);
 }
 
@@ -60,7 +74,6 @@ void readOccupancyGrid(const nav_msgs::OccupancyGrid::ConstPtr& msg) {
 		threads[i].join();
 	}
 
-
 	ROS_INFO("DONE");
 }
 
@@ -94,4 +107,42 @@ int main(int argc, char **argv) {
 	delete myMap;
 	delete marker;
 	delete algorithm;
+}
+
+
+std::vector<AStar::Position> extractWaypoints(std::vector<AStar::Position> path) {
+    std::vector<AStar::Position> waypoints;
+    
+    // TODO: CHANGE FROM HARDCODED VALUE TO PARAMETER
+    // Currently set to 4 as it is half of the robot size
+    int minWaypointDistance = 4;
+    int currentWaypointDistance = 0;
+    
+    // Impossible values, so first point will be pushed
+    int lastDeltaX = -999, lastDeltaY = -999;
+    // Current loop delta values;
+    int currentDeltaX, currentDeltaY;
+    
+    // Go through each point in path. If direction is changed and if
+    // the distance between two point in different direction is big enough
+    // add that point to waypoints vector
+    for(int i = 1; i < path.size(); i++) {
+        currentDeltaX = (path.at(i).x - path.at(i - 1).x);
+        currentDeltaY = (path.at(i).y - path.at(i - 1).y);
+        if(currentDeltaX == lastDeltaX && currentDeltaY == lastDeltaY) {
+            // Increase the current waypoints distance if we are still moving
+            // to same direction
+            currentWaypointDistance++;
+        } else if (currentWaypointDistance > minWaypointDistance || i == 1) {
+            // Push first point as the waypoint, then only push points if
+            // distance between changing delta's is bigger then min constant
+            waypoints.push_back(path.at(i - 1));
+            currentWaypointDistance = 0;
+        }
+        lastDeltaX = currentDeltaX;
+        lastDeltaY = currentDeltaY;
+    }
+    // Push last point of the path
+    if(!path.empty()) waypoints.push_back(path.back());
+    return waypoints;
 }

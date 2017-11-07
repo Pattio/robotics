@@ -13,6 +13,7 @@ class Marker {
 		Marker(ros::NodeHandle nh, std::string topic, std::string frame);
 		void addMarker(geometry_msgs::Pose pose);
 		void addArrow(geometry_msgs::Pose pose, std::string arrow_namespace);
+		void addWaypoint(geometry_msgs::Pose pose);
 		void draw();
 		void clear();
 
