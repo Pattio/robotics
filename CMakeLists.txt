@@ -209,6 +209,10 @@ add_executable(transformation
 	src/marker.cpp
 )
 
+add_executable(driver 
+	src/driver.cpp
+)
+
 target_link_libraries(path_planner
   ${catkin_LIBRARIES}
 )
@@ -217,3 +221,6 @@ target_link_libraries(transformation
   ${catkin_LIBRARIES}
 )
 
+target_link_libraries(driver
+  ${catkin_LIBRARIES}
+)

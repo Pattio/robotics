@@ -198,6 +198,7 @@ std::vector<Position> AStarAlgorithm::findPath(const Position &startPosition, co
         path.push_back(currentNode->position);
         currentNode = currentNode->parent;
     }
+    std::reverse(path.begin(), path.end());
     freeMemory(closed);
     return path;
 }

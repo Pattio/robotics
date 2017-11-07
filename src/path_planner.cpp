@@ -1,5 +1,6 @@
 #include <ros/ros.h>
 #include <nav_msgs/OccupancyGrid.h>
+#include <geometry_msgs/PoseArray.h>
 #include <AStar.hpp>
 #include <marker.hpp>
 #include <thread>
@@ -7,11 +8,14 @@
 Marker *marker;
 AStar::Map *myMap;
 AStar::AStarAlgorithm *algorithm;
+ros::Publisher move_publisher;
 
 std::vector<std::vector<double>> goals;
 std::vector<AStar::Position> paths[5];
+std::vector<AStar::Position> waypoints[5];
 
 std::vector<AStar::Position> extractWaypoints(std::vector<AStar::Position> path);
+void publishWaypoints();
 
 void drawMarkersForPath(const std::vector<AStar::Position> &path) {
 	geometry_msgs::Pose pose;
@@ -34,10 +38,9 @@ void drawWaypointsForPath(const std::vector<AStar::Position> &path) {
 }
 
 void findPath(AStar::Position start, AStar::Position end, int pathIndex) {
-	std::cout << "path planning started" << std::endl;
 	paths[pathIndex] = algorithm->findPath(start, end);
-	std::vector<AStar::Position> waypoints = extractWaypoints(paths[pathIndex]);
-	drawWaypointsForPath(waypoints);
+	waypoints[pathIndex] = extractWaypoints(paths[pathIndex]);
+	drawWaypointsForPath(waypoints[pathIndex]);
 	drawMarkersForPath(paths[pathIndex]);
 }
 
@@ -49,8 +52,9 @@ void readOccupancyGrid(const nav_msgs::OccupancyGrid::ConstPtr& msg) {
     std::vector<int> grid(msg->data.begin(), msg->data.end());
     // Create map object with all the information
 	myMap = new AStar::Map(msg->info.height, msg->info.width, grid, 0, mapOrigin, msg->info.resolution);
-	// Inflate all obsticles by half of robot size
-	myMap->inflateObsticles(5);
+	// Inflate all obsticles by half of robot hypotenuse size (should be 14/1.2 = 11.7)
+	myMap->inflateObsticles(8);
+	
 	
 	// Create 5 threads for each of the goals
 	std::thread threads[5];
@@ -64,16 +68,17 @@ void readOccupancyGrid(const nav_msgs::OccupancyGrid::ConstPtr& msg) {
 	AStar::Position startPosition = myMap->transformMapPositionToGridPosition(AStar::PositionMap(goals.at(0).at(0), goals.at(0).at(1)));
 	for(int i = 1; i < goals.size(); i++) {
 		AStar::Position endPosition = myMap->transformMapPositionToGridPosition(AStar::PositionMap(goals.at(i).at(0), goals.at(i).at(1)));
-		threads[i - 1] = std::thread(findPath, startPosition, endPosition, i);
+		threads[i - 1] = std::thread(findPath, startPosition, endPosition, i-1);
 		startPosition = endPosition;
 	}
-
 	
 	// Join all the threads
 	for(int i = 0; i < 5; i++) {
 		threads[i].join();
 	}
 
+	// Publish waypoints to driver after path is planned
+	publishWaypoints();
 	ROS_INFO("DONE");
 }
 
@@ -88,6 +93,31 @@ void readParameters(ros::NodeHandle nh) {
 	}
 }
 
+void publishWaypoints() {
+	geometry_msgs::PoseArray poseArray;
+	poseArray.header.stamp = ros::Time::now();
+  	poseArray.header.frame_id = "/map";
+	geometry_msgs::Pose pose;
+
+	double lastX, lastY, currentX, currentY;
+	for(int i = 0; i < 5; i++) {
+		for(int j = 0; j < waypoints[i].size(); j++) {
+			currentX = myMap->origin.x + waypoints[i].at(j).x * myMap->cellResolution;
+			currentY = myMap->origin.y + waypoints[i].at(j).y * myMap->cellResolution;
+			
+			// Skip duplicate of endpoint -> startpoint
+			if(lastX == currentX && lastY == currentY) continue;
+
+			pose.position.x = currentX;
+			pose.position.y = currentY;
+			poseArray.poses.push_back(pose);
+			lastX = currentX;
+			lastY = currentY;
+		}
+	}
+	move_publisher.publish(poseArray);
+}
+
 int main(int argc, char **argv) {
 
 	// Initialize ROS and become ROS node
@@ -95,18 +125,21 @@ int main(int argc, char **argv) {
 	ros::NodeHandle nh;
 	// Create marker object
 	marker = new Marker(nh, "path", "map");
+	// Create publisher which publishes waypoints to driver
+	move_publisher = nh.advertise<geometry_msgs::PoseArray>("/drive_waypoints", 1);
 	// Read parameters
 	readParameters(nh);
 
 	// Use wait for message (practical)
 	// rospy.wait_for_message(’/map’,OccupancyGrid,timeout=None)
 	ros::Subscriber sub = nh.subscribe("map", 1000, &readOccupancyGrid);
+
 	ros::spin();
 	
 	// Clean memory
-	delete myMap;
-	delete marker;
-	delete algorithm;
+	if(algorithm != nullptr) delete algorithm;
+	if(myMap != nullptr) delete myMap;
+	if(marker != nullptr) delete marker;
 }
 
 
