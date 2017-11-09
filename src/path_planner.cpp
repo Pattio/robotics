@@ -115,8 +115,8 @@ void publishWaypoints() {
 	double lastX, lastY, currentX, currentY;
 	for(int i = 0; i < 5; i++) {
 		for(int j = 0; j < waypoints[i].size(); j++) {
-			currentX = myMap->origin.x + waypoints[i].at(j).x * myMap->cellResolution;
-			currentY = myMap->origin.y + waypoints[i].at(j).y * myMap->cellResolution;
+			currentX = /*myMap->origin.x + */waypoints[i].at(j).x * myMap->cellResolution;
+			currentY = /*myMap->origin.y +*/ waypoints[i].at(j).y * myMap->cellResolution;
 			
 			// Skip duplicate of endpoint -> startpoint
 			if(lastX == currentX && lastY == currentY) continue;

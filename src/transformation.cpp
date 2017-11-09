@@ -1,7 +1,9 @@
 #include <ros/ros.h>
 #include <nav_msgs/Odometry.h>
+#include <nav_msgs/OccupancyGrid.h>
 #include <tf/transform_broadcaster.h>
 #include <geometry_msgs/Pose.h>
+#include <geometry_msgs/Point.h>
 
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
@@ -9,6 +11,7 @@
 
 geometry_msgs::Pose realPose;
 geometry_msgs::Pose odomPose;
+geometry_msgs::Point mapOrigin;
 visualization_msgs::MarkerArray realPoseMarkers;
 visualization_msgs::MarkerArray odomPoseMarkers;
 std::vector<double> robot_start_pose;
@@ -19,7 +22,7 @@ void basePoseGroundTruthCallback(const nav_msgs::Odometry::ConstPtr& msg) {
 
 	tf::Quaternion quaternion(msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z, msg->pose.pose.orientation.w);
 	tf::Transform transform;
-	transform.setOrigin(tf::Vector3(msg->pose.pose.position.x, msg->pose.pose.position.y, msg->pose.pose.position.z));
+	transform.setOrigin(tf::Vector3(msg->pose.pose.position.x + fabs(mapOrigin.x), msg->pose.pose.position.y + fabs(mapOrigin.y), msg->pose.pose.position.z + mapOrigin.z));
 	transform.setRotation(quaternion);
 	broadcaster.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "/map", "/real_robot_pose"));
 }
@@ -43,6 +46,10 @@ int main(int argc, char **argv) {
 
 	// Create marker object
 	Marker marker(nh, "real_and_odom_poses", "map");
+
+	// Get map info
+	nav_msgs::OccupancyGrid oG = *(ros::topic::waitForMessage<nav_msgs::OccupancyGrid>("map", ros::Duration(10)));
+	mapOrigin = oG.info.origin.position;
 
 	// Subscribe to base_pose_ground_truth and odom
 	ros::Subscriber base_pose_subscriber = nh.subscribe("base_pose_ground_truth", 1000, &basePoseGroundTruthCallback);
