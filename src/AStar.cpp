@@ -81,9 +81,25 @@ std::vector<signed char> Map::getFlattenedMap() {
     return flattened;
 }
 
+
+void Map::expandAroundException(int x, int y, int radius, bool exceptions[]) {
+    int topLeftX = (x - radius < 0) ? 0 : x - radius;
+    int topLeftY = (y - radius < 0) ? 0 : y - radius;
+    int bottomRightX = (x + radius >= width) ? width - 1 : x + radius;
+    int bottomRightY = (y + radius >= height) ? height - 1 : y + radius;
+
+    for(int z = topLeftY; z <= bottomRightY; z++) {
+        for(int x = topLeftX; x <= bottomRightX; x++) {
+            if(mapVector.at(z).at(x) != emptyCell)
+            exceptions[z * width  + x] = true;
+        }
+    }
+}
+
 void Map::inflateObsticles(int radius) {
-    int robotHeightInPixels = 10;
-    int robotWidthInPixels = 10;
+    int robotHeightInPixels = 9;
+    int robotWidthInPixels = 9;
+    int maxRobotSize = std::max(robotWidthInPixels, robotHeightInPixels) + radius;
     std::vector<std::vector<int>> newMap = mapVector;
     
     // Find inflate exceptions
@@ -91,7 +107,7 @@ void Map::inflateObsticles(int radius) {
     // Set all current Y empty spaces to 0
     int currentEmptySpaceInYDirection[width] = { 0 };
     bool exceptions[height][width] = { false };
-
+    bool exceptionsReal[height][width] = { false };
 
     for(int i = 0; i < height; i++) {
         for(int j = 0; j < width; j++) {
@@ -104,72 +120,44 @@ void Map::inflateObsticles(int radius) {
                     currentEmptySpaceInYDirection[j] >= robotHeightInPixels) {
                         exceptions[i - currentEmptySpaceInYDirection[j] - 1][j] = true;
                         exceptions[i][j] = true;
+                        exceptionsReal[i - currentEmptySpaceInYDirection[j] - 1][j] = true;
+                        exceptionsReal[i][j] = true;
 
-                        if(j-1 < 0) continue;
-                        // Find where exception starts
-                        if(exceptions[i][j-1] == false) {
-                        // Add neighbors that are in radius to exception list as well,
-                        // otherwise neighbour will expand to exception zone and close
-                        // it from sides
-                            for(int z = 0; z < robotWidthInPixels; z++) {
-                                if(j - z >= 0) {
+                    // Find begining of the exception
+                    if(j-1 >= 0 && exceptions[i][j-1] == false) {
+                        // Expand everything about top exception point
+                        expandAroundException(j, i, maxRobotSize, exceptionsReal[0]);
+                        // Expand everything about bottom exception point
+                         expandAroundException(j, i - currentEmptySpaceInYDirection[j] - 1, maxRobotSize, exceptionsReal[0]);
 
-                                     // Expand to left
-                                     exceptions[i - currentEmptySpaceInYDirection[j] - 1][j-z] = true;
-                                     exceptions[i][j-z] = true;
-
-                                     // Expand to bottom
-                                     if(i - currentEmptySpaceInYDirection[j] - 1 - z  >= 0) {
-                                        exceptions[i - currentEmptySpaceInYDirection[j] - 1 - z][j-z] = true;
-                                     }
-
-                                     // Expand to top
-                                     if(i + z  < height - 1) {
-                                        exceptions[i + z][j-z] = true;
-                                     }
-
-                                }
-                                // if(j + z < width - 1) {
-                                //     exceptions[i - currentEmptySpaceInYDirection[j] - 1][j+z] = true;
-                                //      exceptions[i][j+z] = true;
-                                // }
-                            }
-                        }
+                    }
 
                 }
                 currentEmptySpaceInYDirection[j] = 0;
             }
 
-            // Find where exception ends 
-            if(exceptions[i][j] == false && exceptions[i][j -1]) {
-                for(int z = 0; z < robotWidthInPixels; z++) {
-                    if(j - 1 + z < width - 1) {
-
-                        // Expand to right
-                        exceptions[i - currentEmptySpaceInYDirection[j - 1] - 1][j - 1 + z] = true;
-                         exceptions[i][j - 1 +z] = true;
-
-                         // Expand to bottom right
-                         // if(i - currentEmptySpaceInYDirection[j] - 1 - z >= 0) {
-                         //    exceptions[i - currentEmptySpaceInYDirection[j] - 1 - z][j+z] = true;
-                         // }
-
-                         // // Expand to top
-                         // if(i + z  < height - 1) {
-                         //    exceptions[i + z][j-z] = true;
-                         // }
-                    }
-                }
+            // Find end of the exception
+            if(j-1 >= 0 && exceptions[i][j] == false && exceptions[i][j - 1]) {
+                // Expand everything about top exception point
+                expandAroundException(j - 1, i, maxRobotSize, exceptionsReal[0]);
+                // Expand everything about bottom exception point
+                expandAroundException(j - 1, i - currentEmptySpaceInYDirection[j] - 1, maxRobotSize, exceptionsReal[0]);
             }
         }
     }
 
+    // Inflating obstacles
+    int radiusCopy;
     for(int i = 0; i < height; i++) {
         for(int j = 0; j < width; j++) {
             // Find cell which is not empty and 
             if(mapVector.at(i).at(j) != emptyCell) {
 
-                if(exceptions[i][j] == true) continue;  
+                if(exceptionsReal[i][j] == true) {
+                    radiusCopy = radius / 2; 
+                } else {
+                    radiusCopy = radius;
+                }
 
                 // Check that neighbour pixels exists
                 if((i-1 > 0) && (i+1 < height -1) && (j-1 > 0) && (j+1 < width -1)) {
@@ -182,38 +170,12 @@ void Map::inflateObsticles(int radius) {
                     }
                 }
 
-                
-                // TODO: CHANGE HARDCODED VALUE (robot size takes 8 pixels)
-                // int inflationFromBothSidesSize = radius * 2 + 8;
-
-                // if(i + inflationFromBothSidesSize < height - 1 &&
-                //     j - inflationFromBothSidesSize > 0 &&
-                //     mapVector.at(i + 1).at(j) == emptyCell && 
-                //     mapVector.at(i + inflationFromBothSidesSize).at(j - inflationFromBothSidesSize) != emptyCell) {
-                //     // inflate by half of robot size 
-                //     continue;
-                // }
-
-                // if(i + inflationFromBothSidesSize < height - 1 &&
-                //     mapVector.at(i + 1).at(j) == emptyCell && 
-                //     mapVector.at(i + inflationFromBothSidesSize).at(j) != emptyCell) {
-                //     // inflateExceptions[j] = i;
-                //     // inflate by half of robot size 
-                //     continue;
-                // }
-
-                // if(i - inflationFromBothSidesSize > 0 &&
-                //     mapVector.at(i - 1).at(j) == emptyCell && 
-                //     mapVector.at(i - inflationFromBothSidesSize).at(j) != emptyCell) {
-                //     continue;
-                // }
-
 
                 // Find top left and bottom right corners
-                int topLeftX = (j - radius < 0) ? 0 : j - radius;
-                int topLeftY = (i - radius < 0) ? 0 : i - radius;
-                int bottomRightX = (j + radius >= width) ? width - 1 : j + radius;
-                int bottomRightY = (i + radius >= height) ? height -1 : i + radius;
+                int topLeftX = (j - radiusCopy < 0) ? 0 : j - radiusCopy;
+                int topLeftY = (i - radiusCopy < 0) ? 0 : i - radiusCopy;
+                int bottomRightX = (j + radiusCopy >= width) ? width - 1 : j + radiusCopy;
+                int bottomRightY = (i + radiusCopy >= height) ? height -1 : i + radiusCopy;
                 
                 for(int z = topLeftY; z <= bottomRightY; z++) {
                     for(int x = topLeftX; x <= bottomRightX; x++) {

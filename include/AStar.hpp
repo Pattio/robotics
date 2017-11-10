@@ -43,6 +43,7 @@ namespace AStar {
         // Inflate all obsticles by given radius
         void inflateObsticles(int radius);
         void debugMap();
+        void expandAroundException(int x, int y, int radius, bool exceptions[]);
         bool obstacleExists(const Position &position);
         Position transformMapPositionToGridPosition(const PositionMap &positionInMap);
         
