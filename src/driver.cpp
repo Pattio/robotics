@@ -35,19 +35,26 @@ int main(int argc, char **argv) {
 
 	while(ros::ok()) {
 		ros::spinOnce();
-		if(waypoints.size() == 0 || indexas == (waypoints.size() - 1)) continue;
+		if(waypoints.size() == 0 || indexas == (waypoints.size())) continue;
 
 		targetPoint.x = waypoints.at(indexas).x;
 		targetPoint.y = waypoints.at(indexas).y;
+		geometry_msgs::Point obsticleDelta = transformPoint(targetPoint, "map", "real_robot_pose");
+		double distance = sqrt(obsticleDelta.x * obsticleDelta.x + obsticleDelta.y * obsticleDelta.y);
+
+
+		// If you are spawned at current path point skip it
+
+		if(distance <= 0.1) indexas += 1;
 
 		try {
 			tf::StampedTransform transform;
 			listener->lookupTransform("map", "real_robot_pose", ros::Time(0), transform);
 
+
 			double yaw = tf::getYaw(transform.getRotation());
 			currentPoint.x = transform.getOrigin().x();
 			currentPoint.y = transform.getOrigin().y();
-			geometry_msgs::Point obsticleDelta = transformPoint(targetPoint, "map", "real_robot_pose");
 			double targetAngle = angle(currentPoint.x, currentPoint.y, targetPoint.x, targetPoint.y);
 			
 			std::cout << "robot angle" << yaw << " taget is : " << targetAngle << std::endl;
@@ -57,14 +64,21 @@ int main(int argc, char **argv) {
 
 			if(fabs(rotationDelta) >= 0.1) {
 				twist.angular.x = 0;
+				// Add code to fix rotation to nearest side
+				if(rotationDelta > M_PI) {
+					rotationDelta -= M_PI * 2;
+				} else if(rotationDelta <= -M_PI) {
+					rotationDelta += M_PI * 2;
+				}
+
 				twist.angular.z = (rotationDelta < 0) ? -0.1 : 0.1;
 			} else {
-				double distance = sqrt(obsticleDelta.x * obsticleDelta.x + obsticleDelta.y * obsticleDelta.y);
 				if(distance >= 0.1) {
 					twist.linear.x = 0.1;
 				} else {
+					// driving = false;
 					std::cout << "reached goal" << indexas << std::endl;
-					indexas += 1;
+					// indexas += 1;
 				}
 			}
 

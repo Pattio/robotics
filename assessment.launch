@@ -11,4 +11,12 @@
 <!--  <node name="dummy_localization" pkg="dummy_localization" type="dummy_localization"/>  -->
   <node name="dummy_localization" pkg="dummy_localization" type="dummy_localization.py"/>  
   <node name="add_gaussian_noise" pkg="add_gaussian_noise" type="addGaussianNoise.py"/>
+
+
+  <node
+    pkg="cs3027"
+    type="transformation"
+    name="transformation"
+    respawn="true"
+  />
 </launch>

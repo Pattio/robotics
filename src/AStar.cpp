@@ -96,10 +96,14 @@ void Map::expandAroundException(int x, int y, int radius, bool exceptions[]) {
     }
 }
 
-void Map::inflateObsticles(int radius) {
-    int robotHeightInPixels = 9;
-    int robotWidthInPixels = 9;
-    int maxRobotSize = std::max(robotWidthInPixels, robotHeightInPixels) + radius;
+void Map::inflateObsticles(double robotWidth, double robotHeight) {
+    int robotWidthInPixels = std::ceil(robotWidth / cellResolution);
+    int robotHeightInPixels = std::ceil(robotHeight / cellResolution);
+    // int hypo = std::max(robotWidthInPixels, robotHeightInPixels);
+    int radius = std::ceil(sqrt(robotWidth * robotWidth + robotHeight * robotHeight) / cellResolution);
+    int exceptionRadius = radius * 2.5;
+    
+    int maxRobotSize = std::max(robotWidthInPixels, robotHeightInPixels);
     std::vector<std::vector<int>> newMap = mapVector;
     
     // Find inflate exceptions
@@ -126,9 +130,9 @@ void Map::inflateObsticles(int radius) {
                     // Find begining of the exception
                     if(j-1 >= 0 && exceptions[i][j-1] == false) {
                         // Expand everything about top exception point
-                        expandAroundException(j, i, maxRobotSize, exceptionsReal[0]);
+                        expandAroundException(j, i, exceptionRadius, exceptionsReal[0]);
                         // Expand everything about bottom exception point
-                         expandAroundException(j, i - currentEmptySpaceInYDirection[j] - 1, maxRobotSize, exceptionsReal[0]);
+                         expandAroundException(j, i - currentEmptySpaceInYDirection[j] - 1, exceptionRadius, exceptionsReal[0]);
 
                     }
 
@@ -139,9 +143,9 @@ void Map::inflateObsticles(int radius) {
             // Find end of the exception
             if(j-1 >= 0 && exceptions[i][j] == false && exceptions[i][j - 1]) {
                 // Expand everything about top exception point
-                expandAroundException(j - 1, i, maxRobotSize, exceptionsReal[0]);
+                expandAroundException(j - 1, i, exceptionRadius, exceptionsReal[0]);
                 // Expand everything about bottom exception point
-                expandAroundException(j - 1, i - currentEmptySpaceInYDirection[j] - 1, maxRobotSize, exceptionsReal[0]);
+                expandAroundException(j - 1, i - currentEmptySpaceInYDirection[j] - 1, exceptionRadius, exceptionsReal[0]);
             }
         }
     }
@@ -154,7 +158,7 @@ void Map::inflateObsticles(int radius) {
             if(mapVector.at(i).at(j) != emptyCell) {
 
                 if(exceptionsReal[i][j] == true) {
-                    radiusCopy = radius / 2; 
+                    radiusCopy = maxRobotSize / 2 + 1; 
                 } else {
                     radiusCopy = radius;
                 }
@@ -176,6 +180,11 @@ void Map::inflateObsticles(int radius) {
                 int topLeftY = (i - radiusCopy < 0) ? 0 : i - radiusCopy;
                 int bottomRightX = (j + radiusCopy >= width) ? width - 1 : j + radiusCopy;
                 int bottomRightY = (i + radiusCopy >= height) ? height -1 : i + radiusCopy;
+
+                if(exceptionsReal[i][j] == true) {
+                    topLeftX -= radiusCopy * 2;
+                    bottomRightX += radiusCopy * 2;
+                }
                 
                 for(int z = topLeftY; z <= bottomRightY; z++) {
                     for(int x = topLeftX; x <= bottomRightX; x++) {

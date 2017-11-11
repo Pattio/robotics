@@ -41,7 +41,7 @@ namespace AStar {
     struct Map {
         Map(int height, int width, std::vector<int> data, int emptyCell, PositionMap origin, double cellResolution);
         // Inflate all obsticles by given radius
-        void inflateObsticles(int radius);
+        void inflateObsticles(double robotWidth, double robotHeight);
         void debugMap();
         void expandAroundException(int x, int y, int radius, bool exceptions[]);
         bool obstacleExists(const Position &position);

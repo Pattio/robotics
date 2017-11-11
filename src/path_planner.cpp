@@ -56,7 +56,7 @@ void readOccupancyGrid(const nav_msgs::OccupancyGrid msg) {
 	myMap = new AStar::Map(msg.info.height, msg.info.width, grid, 0, mapOrigin, msg.info.resolution);
 	// Inflate all obsticles by half of robot hypotenuse size (should be 14/1.2 = 11.7)
 	// myMap->inflateObsticles(8);
-	myMap->inflateObsticles(8);
+	myMap->inflateObsticles(0.1, 0.1);
 	
 
 	nav_msgs::OccupancyGrid gridCopy = msg;
@@ -161,7 +161,7 @@ std::vector<AStar::Position> extractWaypoints(std::vector<AStar::Position> path)
     
     // TODO: CHANGE FROM HARDCODED VALUE TO PARAMETER
     // Currently set to 4 as it is half of the robot size
-    int minWaypointDistance = 4;
+    int minWaypointDistance = 0;
     int currentWaypointDistance = 0;
     
     // Impossible values, so first point will be pushed
