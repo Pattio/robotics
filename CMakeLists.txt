@@ -213,6 +213,10 @@ add_executable(driver
 	src/driver.cpp
 )
 
+add_executable(filtered_base_scan 
+  src/filtered_base_scan.cpp
+)
+
 target_link_libraries(path_planner
   ${catkin_LIBRARIES}
 )
@@ -222,5 +226,10 @@ target_link_libraries(transformation
 )
 
 target_link_libraries(driver
+  ${catkin_LIBRARIES}
+)
+
+
+target_link_libraries(filtered_base_scan
   ${catkin_LIBRARIES}
 )
