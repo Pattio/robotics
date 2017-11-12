@@ -59,15 +59,15 @@ int main(int argc, char **argv) {
 	while(ros::ok()) {
 		ros::spinOnce();
 
-		// Debug only
-		try {
-			listener->lookupTransform("map", "real_robot_pose", ros::Time(0), transform);
-			robotPose.x = transform.getOrigin().x();
-			robotPose.y = transform.getOrigin().y();
-		} catch (tf::TransformException ex) {
-			ROS_ERROR("%s",ex.what());
-			ros::Duration(1.0).sleep();
-		}
+		// // Debug only
+		// try {
+		// 	listener->lookupTransform("map", "real_robot_pose", ros::Time(0), transform);
+		// 	robotPose.x = transform.getOrigin().x();
+		// 	robotPose.y = transform.getOrigin().y();
+		// } catch (tf::TransformException ex) {
+		// 	ROS_ERROR("%s",ex.what());
+		// 	ros::Duration(1.0).sleep();
+		// }
 
 		// If no waypoints received, or last point reached continue, waiting for
 		// new waypoints
@@ -97,11 +97,9 @@ int main(int argc, char **argv) {
 
 			switch(drivingMode) {
 				case DrivingMode::normal:
-					std::cout << "normal driving" << std::endl;
 					normalDrive(rotationDelta, distance);
 				break;
 				case DrivingMode::bug:
-					std::cout << "bug driving" << std::endl;
 					bugDrive(targetPoint);
 				break;
 			}
@@ -149,11 +147,13 @@ void bugDrive(geometry_msgs::Point targetPoint) {
 	std::cout << "close obsticle value is" << closeObsticle << std::endl;
 	if(closeObsticle) {
 		twist.angular.z = -0.1;
-	} else if (robotPose.x - robot_width <= lastObsticle.x) {
+	} else if (robotPose.x - robot_width * 3 < lastObsticle.x && robotPose.y - robot_width < lastObsticle.y) {
 		// There is a bug if lastObsticle is on the right of the map
 		// but robot is going to left of the map robot will continue going straigh
 		// without stoping, possible fix is to check with side of the map robot is facing and if robot is facing left map -pi then check 
 		// if robotPose.x <= lasObsticle.x - robot_WIDTH
+		std::cout << "OBSTICLE WAS AT x" << lastObsticle.x << "and y: " << lastObsticle.y << std::endl;
+		std::cout << "ROBOT POSE IS AT x" << robotPose.x << " and y:" << robotPose.y << std::endl;
 		std::cout << "bug wants to go straight" << std::endl;
 		twist.linear.x = 0.1;
 	} else {
@@ -236,7 +236,7 @@ void laserscanCallback(const sensor_msgs::LaserScan& msg) {
 		// 	drivingMode = DrivingMode::normal;
 
 		// ROS_INFO_STREAM("REL " << test << " frame obstacle is at x: " << transformedPoint.x << " y: " << transformedPoint.y);
-		if(fabs(transformedPoint.y) < (robot_width / 2) && transformedPoint.x < robot_hypo) {
+		if(fabs(transformedPoint.y) < (robot_width / 2) && transformedPoint.x < robot_width * 2) {
 			closeObsticle = true;
 			drivingMode = DrivingMode::bug;
 			ROS_INFO_STREAM("In robot frame obstacle is at x: " << transformedPoint.x << " y: " << transformedPoint.y);
@@ -249,9 +249,9 @@ void laserscanCallback(const sensor_msgs::LaserScan& msg) {
 	std::cout << safeScans << std::endl;
 	if(safeScans == 30) {
 		std::cout << "meeee " << std::endl;
-		closeObsticle = false;
 		// record current position
-		lastObsticle = robotPose;
+		if(closeObsticle == true) lastObsticle = robotPose;
+		closeObsticle = false;
 	}
 }
 
