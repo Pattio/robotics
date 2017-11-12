@@ -66,7 +66,7 @@ void readOccupancyGrid(const nav_msgs::OccupancyGrid msg) {
 	gridCopy.data = myMap->getFlattenedMap();
 	map_publisher.publish(gridCopy);
 
-	/*
+	
 	// Create 5 threads for each of the goals
 	std::thread threads[5];
 	algorithm = new AStar::AStarAlgorithm(*myMap);
@@ -90,7 +90,7 @@ void readOccupancyGrid(const nav_msgs::OccupancyGrid msg) {
 
 	// Publish waypoints to driver after path is planned
 	publishWaypoints();
-	*/
+	
 	ROS_INFO("DONE");
 	exit(-1);
 }

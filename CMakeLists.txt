@@ -210,6 +210,7 @@ add_executable(transformation
 )
 
 add_executable(driver 
+  src/AStar.cpp
 	src/driver.cpp
 )
 
