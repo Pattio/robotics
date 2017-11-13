@@ -12,13 +12,11 @@ bool closeObsticle = false;
 ros::Publisher drive_publisher;
 std::vector<geometry_msgs::Point> waypoints;
 tf::TransformListener *listener;
-// AStar::Map *map = nullptr;
 int indexas = 0;
 DrivingMode drivingMode = DrivingMode::normal;
 geometry_msgs::Point robotPose, lastObsticle, drivingModeTransferPoint;
 #define robot_width 0.1
 #define robot_hypo 0.14
-#define random_number 0.4
 #define treshold 0.5
 
 
@@ -34,8 +32,6 @@ void waypointsCallback(const geometry_msgs::PoseArray::ConstPtr& msg);
 geometry_msgs::Point transformPoint(geometry_msgs::Point point, std::string baseFrame, std::string targetFrame);
 // Laser scan callback
 void laserscanCallback(const sensor_msgs::LaserScan& msg);
-// Occupancy grid callback
-// void fillMap();
 // Driving options
 void normalDrive(double rotationDelta, double distance);
 void bugDrive(geometry_msgs::Point targetPoint);
@@ -51,7 +47,6 @@ int main(int argc, char **argv) {
 	ros::Subscriber laserscan_subscriber = nh.subscribe("/base_scan", 100, laserscanCallback);
 	drive_publisher = nh.advertise<geometry_msgs::Twist>("/cmd_vel", 100);
 
-	// fillMap();
 	listener = new tf::TransformListener;
 	tf::StampedTransform transform;
 	geometry_msgs::Point targetPoint;
@@ -61,16 +56,6 @@ int main(int argc, char **argv) {
 
 	while(ros::ok()) {
 		ros::spinOnce();
-
-		// // Debug only
-		// try {
-		// 	listener->lookupTransform("map", "real_robot_pose", ros::Time(0), transform);
-		// 	robotPose.x = transform.getOrigin().x();
-		// 	robotPose.y = transform.getOrigin().y();
-		// } catch (tf::TransformException ex) {
-		// 	ROS_ERROR("%s",ex.what());
-		// 	ros::Duration(1.0).sleep();
-		// }
 
 		// If no waypoints received, or last point reached continue, waiting for
 		// new waypoints
@@ -121,7 +106,7 @@ int main(int argc, char **argv) {
 void normalDrive(double rotationDelta, double distance) {
 	geometry_msgs::Twist twist;
 	double absoluteRotation = fabs(rotationDelta);
-	
+
 	// Adjust rotation
 	if(rotationDelta > M_PI) {
 		rotationDelta -= M_PI * 2;
@@ -129,21 +114,21 @@ void normalDrive(double rotationDelta, double distance) {
 		rotationDelta += M_PI * 2;
 	}
 
+	// Find distance to point where last obsticle was encountered
 	double xDelta = robotPose.x - drivingModeTransferPoint.x;
 	double yDelta = robotPose.y - drivingModeTransferPoint.y;
 	double distanceFromLastObsticle = sqrt(xDelta * xDelta + yDelta * yDelta);
-	std::cout << "distance from ob" << distanceFromLastObsticle << std::endl;
-	std::cout << "obsticle dist x" << drivingModeTransferPoint.x << "y:" << drivingModeTransferPoint.y << std::endl;
-	std::cout << "YDELATA " << yDelta << std::endl;
+
+	// If there are no obsticles do normal rotation
+	// if there is an obsticle close rotate slowly and move forward a little
+	// otherwise move forwarrd
 	if(absoluteRotation >= 0.3 && !obsticleLeft && !obsticleRight && distanceFromLastObsticle >= treshold) {
 		twist.angular.z = (rotationDelta < 0) ? -0.3 : 0.3;
 	} else if (absoluteRotation >= 0.2 && !obsticleLeft && !obsticleRight && distanceFromLastObsticle >= treshold) {
 		twist.angular.z = (rotationDelta < 0) ? -0.2 : 0.2;
 	} else if (absoluteRotation >= 0.1 && !obsticleLeft && !obsticleRight && distanceFromLastObsticle >= treshold) {
-		std::cout << "ROBOT HYPO" << std::endl;
 		twist.angular.z = (rotationDelta < 0) ? -0.1 : 0.1;
 	} else if (absoluteRotation >= 0.1) {
-		std::cout << "EVADING OBSTICLE" << std::endl;
 		twist.angular.z = (rotationDelta < 0) ? -0.05 : 0.05;
 		twist.linear.x = 0.05;
 	} else {
@@ -161,8 +146,8 @@ void normalDrive(double rotationDelta, double distance) {
 void bugDrive(geometry_msgs::Point targetPoint) {
 	geometry_msgs::Twist twist;
 
-	// double deltaX = targetPoint.x - robotPose.x;
-	std::cout << "close obsticle value is" << closeObsticle << std::endl;
+	// If there is an obsticle rotate till you face obsticle with your side
+	// then move forward while obstile is on your side
 	if(closeObsticle) {
 		twist.angular.z = -0.1;
 	} else if (robotPose.x - robot_width * 3 < lastObsticle.x && robotPose.y - robot_width < lastObsticle.y) {
@@ -185,6 +170,7 @@ void narrowDrive(double robotYaw) {
 	geometry_msgs::Twist twist;
 	double target;
 
+	// Find which way robot is heading and calibrate robot to move close between obsticles
 	if((robotYaw >= 0 && robotYaw <= M_PI / 4) || (robotYaw < 0 && robotYaw >= -M_PI / 4)) {
 		std::cout << "adjust to east" << std::endl;
 		target = 0;
@@ -209,14 +195,12 @@ void narrowDrive(double robotYaw) {
 	} else if(rotationDelta <= -M_PI) {
 		rotationDelta += M_PI * 2;
 	}
-	std::cout << "abs rot" << absoluteRotation << std::endl;
-	std::cout << "rot delta" << rotationDelta << std::endl;
+
 	if(absoluteRotation >= 0.05) {
 		twist.angular.z = (rotationDelta < 0) ? -0.05 : 0.05;
 	} else {
 		twist.linear.x = 0.1;
 	}
-	std::cout << "its me narow" << std::endl;
 	drive_publisher.publish(twist);
 }
 
@@ -229,11 +213,10 @@ void waypointsCallback(const geometry_msgs::PoseArray::ConstPtr& msg) {
 	}
 }
 
+double round(double x) { return floor(x * 100 + 0.5) / 100; }
 double angle(double currentX, double currentY, double targetX, double targetY) {
 	return atan2(round(targetY) - round(currentY), round(targetX) - round(currentX));
 }
-
-double round(double x) { return floor(x * 100 + 0.5) / 100; }
 
 geometry_msgs::Point transformPoint( geometry_msgs::Point point, 
 	std::string baseFrame, std::string targetFrame) 
@@ -258,42 +241,32 @@ void laserscanCallback(const sensor_msgs::LaserScan& msg) {
 	float start_angle = msg.angle_min;
 	float increment = msg.angle_increment;
 	geometry_msgs::Point normalPoint, transformedPoint;
-	obsticleLeft = false;
-	obsticleRight = false;
+	obsticleLeft = false, obsticleRight = false;
 	int safeScans = 0;
-	int obsticlesOnLeft = 0, obsticlesOnRight = 0;
-	int test = 0;
+
 	for(auto &range : msg.ranges) {
 		normalPoint.x = range * cos(start_angle);
 		normalPoint.y = range * sin(start_angle);
 		transformedPoint = transformPoint(normalPoint, "/base_laser_link", "/base_link");
 
 		if(transformedPoint.y > 0 && transformedPoint.y < robot_width && transformedPoint.x <= robot_width / 2) {
-			std::cout << "CLOSE OBSTICLE ON THE LEFT" << std::endl;
-			// closeObsticleOnLeft = true;
 			obsticleLeft = true;
-			// obsticlesOnLeft += 1;
 		}
 
 		if(transformedPoint.y < 0 && fabs(transformedPoint.y) < robot_width && transformedPoint.x <= robot_width / 2) {
-			std::cout << "CLOSE OBSTICLE ON THE RIGHT" << std::endl;
-			// closeObsticleOnRight = true;
 			obsticleRight = true;
-			obsticlesOnRight += 1;
 		}
 
 
 		if(fabs(transformedPoint.y) < (robot_width / 2) && transformedPoint.x < robot_width * 2) {
 			closeObsticle = true;
 			drivingMode = DrivingMode::bug;
-			ROS_INFO_STREAM("In robot frame obstacle is at x: " << transformedPoint.x << " y: " << transformedPoint.y);
 		} else {
 			safeScans++;
 		}
-		test++;
 		start_angle += increment;
 	}
-	std::cout << safeScans << std::endl;
+
 	if(safeScans == 30) {
 		if(closeObsticle == true) lastObsticle = robotPose;
 		closeObsticle = false;
@@ -301,13 +274,9 @@ void laserscanCallback(const sensor_msgs::LaserScan& msg) {
 
 	// If robot has obsticles on both sides change driving mode
 	if(obsticleLeft && obsticleRight) {
-		std::cout << "changin mode to narrow" << std::endl;
 		drivingMode = DrivingMode::narrow;
 	} else if (drivingMode == DrivingMode::narrow){
-		std::cout << "changin mode to normal" << std::endl;
 		drivingModeTransferPoint = robotPose;
 		drivingMode = DrivingMode::normal;
 	}
-	// closeObsticleOnLeft = (obsticleLeft > 0);
-	// closeObsticleOnRight = (obsticlesOnRight > 0);
 }
