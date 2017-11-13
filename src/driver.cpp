@@ -1,12 +1,10 @@
 #include <ros/ros.h>
-#include <AStar.hpp>
 #include <geometry_msgs/Twist.h>
 #include <geometry_msgs/Point.h>
 #include <geometry_msgs/Pose.h>
 #include <geometry_msgs/PoseArray.h>
 #include <tf/transform_listener.h>
 #include <sensor_msgs/LaserScan.h>
-#include <nav_msgs/OccupancyGrid.h>
 
 enum DrivingMode { normal, bug, narrow };
 bool obsticleLeft = false, obsticleRight = false;
@@ -14,7 +12,7 @@ bool closeObsticle = false;
 ros::Publisher drive_publisher;
 std::vector<geometry_msgs::Point> waypoints;
 tf::TransformListener *listener;
-AStar::Map *map = nullptr;
+// AStar::Map *map = nullptr;
 int indexas = 0;
 DrivingMode drivingMode = DrivingMode::normal;
 geometry_msgs::Point robotPose, lastObsticle;
@@ -33,10 +31,11 @@ geometry_msgs::Point transformPoint(geometry_msgs::Point point, std::string base
 // Laser scan callback
 void laserscanCallback(const sensor_msgs::LaserScan& msg);
 // Occupancy grid callback
-void fillMap();
+// void fillMap();
 // Driving options
 void normalDrive(double rotationDelta, double distance);
 void bugDrive(geometry_msgs::Point targetPoint);
+void narrowDrive(double robotYaw);
 
 int main(int argc, char **argv) {
 	// Initialize ROS and become ROS node
@@ -48,7 +47,7 @@ int main(int argc, char **argv) {
 	ros::Subscriber laserscan_subscriber = nh.subscribe("/base_scan", 100, laserscanCallback);
 	drive_publisher = nh.advertise<geometry_msgs::Twist>("/cmd_vel", 100);
 
-	fillMap();
+	// fillMap();
 	listener = new tf::TransformListener;
 	tf::StampedTransform transform;
 	geometry_msgs::Point targetPoint;
@@ -102,6 +101,9 @@ int main(int argc, char **argv) {
 				case DrivingMode::bug:
 					bugDrive(targetPoint);
 				break;
+				case DrivingMode::narrow:
+					narrowDrive(robotYaw);
+				break;
 			}
 
 
@@ -116,18 +118,30 @@ void normalDrive(double rotationDelta, double distance) {
 	geometry_msgs::Twist twist;
 	double absoluteRotation = fabs(rotationDelta);
 
+	// IF YOU HAVE CLOSE OBSTICLE ON RIGHT 
+	// AND YOU  WANT TO DO ROTATION 
+	// MOVE 0.1 FRONT AND DO SMALL ROTATION TO LEFT
+
+	// IF YOU HAVE CLOSE OBSTILE ON LEFT 
+	// AND YOU WANT TO DO ROATION
+	// MOVE 0.1 FRONT AND DO SMALL ROTATION TO RIGHT
+
 	// Adjust rotation
 	if(rotationDelta > M_PI) {
 		rotationDelta -= M_PI * 2;
 	} else if(rotationDelta <= -M_PI) {
 		rotationDelta += M_PI * 2;
 	}
-	if(absoluteRotation >= 0.3) {
+
+	if(absoluteRotation >= 0.3 && !obsticleLeft && !obsticleRight) {
 		twist.angular.z = (rotationDelta < 0) ? -0.3 : 0.3;
-	} else if (absoluteRotation >= 0.2) {
+	} else if (absoluteRotation >= 0.2 && !obsticleLeft && !obsticleRight) {
 		twist.angular.z = (rotationDelta < 0) ? -0.2 : 0.2;
-	} else if (absoluteRotation >= 0.1) {
+	} else if (absoluteRotation >= 0.1 && !obsticleLeft && !obsticleRight) {
 		twist.angular.z = (rotationDelta < 0) ? -0.1 : 0.1;
+	} else if (absoluteRotation >= 0.1) {
+		twist.angular.z = (rotationDelta < 0) ? -0.05 : 0.05;
+		twist.linear.x = 0.1;
 	} else {
 		if(distance >= 0.3) {
 			twist.linear.x = 0.3;
@@ -160,6 +174,45 @@ void bugDrive(geometry_msgs::Point targetPoint) {
 		drivingMode = DrivingMode::normal;
 	}
 
+	drive_publisher.publish(twist);
+}
+
+void narrowDrive(double robotYaw) {
+	geometry_msgs::Twist twist;
+	double target;
+
+	if((robotYaw >= 0 && robotYaw <= M_PI / 4) || (robotYaw < 0 && robotYaw >= -M_PI / 4)) {
+		std::cout << "adjust to east" << std::endl;
+		target = 0;
+	} else if((robotYaw > M_PI / 4 && robotYaw <= M_PI / 2) || (robotYaw >= M_PI / 2 && robotYaw < M_PI * 3 / 4)) {
+		std::cout << "adjust to north" << std::endl;
+		target = M_PI / 2;
+	} else if((robotYaw < -M_PI / 4 && robotYaw >= -M_PI / 2) || (robotYaw < -M_PI / 2 && robotYaw > -M_PI * 3 / 4)) {
+		std::cout << "adjust to south" << std::endl;
+		target = -M_PI / 2;
+	} else {
+		// adjust west
+		std::cout << "adjust to west" << std::endl;
+		target = -M_PI;
+	}
+
+	double rotationDelta = target - robotYaw;
+	double absoluteRotation = fabs(rotationDelta);
+
+	// Adjust rotation
+	if(rotationDelta > M_PI) {
+		rotationDelta -= M_PI * 2;
+	} else if(rotationDelta <= -M_PI) {
+		rotationDelta += M_PI * 2;
+	}
+	std::cout << "abs rot" << absoluteRotation << std::endl;
+	std::cout << "rot delta" << rotationDelta << std::endl;
+	if(absoluteRotation >= 0.05) {
+		twist.angular.z = (rotationDelta < 0) ? -0.05 : 0.05;
+	} else {
+		twist.linear.x = 0.1;
+	}
+	std::cout << "its me narow" << std::endl;
 	drive_publisher.publish(twist);
 }
 
@@ -205,37 +258,28 @@ void laserscanCallback(const sensor_msgs::LaserScan& msg) {
 	obsticleLeft = false;
 	obsticleRight = false;
 	int safeScans = 0;
+	int obsticlesOnLeft = 0, obsticlesOnRight = 0;
 	int test = 0;
 	for(auto &range : msg.ranges) {
 		normalPoint.x = range * cos(start_angle);
 		normalPoint.y = range * sin(start_angle);
 		transformedPoint = transformPoint(normalPoint, "/base_laser_link", "/base_link");
-		// if(transformedPoint.y < 0 && fabs(transformedPoint.y) < (robot_width / 2) && transformedPoint.x < robot_hypo) {
-		// 	std::cout << "OBSTICLE ON THE RIGHT" << std::endl;
-		// 	obsticleRight = true;
-		// }
 
 		if(transformedPoint.y > 0 && transformedPoint.y < robot_width && transformedPoint.x <= robot_width / 2) {
 			std::cout << "CLOSE OBSTICLE ON THE LEFT" << std::endl;
-			closeObsticleOnLeft = true;
+			// closeObsticleOnLeft = true;
+			obsticleLeft = true;
+			// obsticlesOnLeft += 1;
 		}
 
 		if(transformedPoint.y < 0 && fabs(transformedPoint.y) < robot_width && transformedPoint.x <= robot_width / 2) {
 			std::cout << "CLOSE OBSTICLE ON THE RIGHT" << std::endl;
-			closeObsticleOnLeft = true;
+			// closeObsticleOnRight = true;
+			obsticleRight = true;
+			obsticlesOnRight += 1;
 		}
 
-		// if(transformedPoint.y > 0 && transformedPoint.y < robot_width && transformedPoint.x <= 0.05) {
-		// 	std::cout << "OBSTICLE ON THE LEFT" << std::endl;
-		// 	// ROS_INFO_STREAM("In robot frame obstacle is at x: " << transformedPoint.x << " y: " << transformedPoint.y);
-		// 	obsticleLeft = true;
-		// }
 
-		// if((obsticleLeft && !obsticleRight) || (!obsticleLeft && obsticleRight)) drivingMode = DrivingMode::bug;
-		// else 
-		// 	drivingMode = DrivingMode::normal;
-
-		// ROS_INFO_STREAM("REL " << test << " frame obstacle is at x: " << transformedPoint.x << " y: " << transformedPoint.y);
 		if(fabs(transformedPoint.y) < (robot_width / 2) && transformedPoint.x < robot_width * 2) {
 			closeObsticle = true;
 			drivingMode = DrivingMode::bug;
@@ -248,25 +292,27 @@ void laserscanCallback(const sensor_msgs::LaserScan& msg) {
 	}
 	std::cout << safeScans << std::endl;
 	if(safeScans == 30) {
-		std::cout << "meeee " << std::endl;
-		// record current position
 		if(closeObsticle == true) lastObsticle = robotPose;
 		closeObsticle = false;
 	}
+
+	// If robot has obsticles on both sides change driving mode
+	if(obsticleLeft && obsticleRight) {
+		std::cout << "changin mode to narrow" << std::endl;
+		drivingMode = DrivingMode::narrow;
+	} else if (drivingMode == DrivingMode::narrow){
+		std::cout << "changin mode to normal" << std::endl;
+		drivingMode = DrivingMode::normal;
+	}
+	// closeObsticleOnLeft = (obsticleLeft > 0);
+	// closeObsticleOnRight = (obsticlesOnRight > 0);
 }
 
 
-void fillMap() {
-	nav_msgs::OccupancyGrid oG = *(ros::topic::waitForMessage<nav_msgs::OccupancyGrid>("map", ros::Duration(10)));
-	AStar::PositionMap mapOrigin(oG.info.origin.position.x, oG.info.origin.position.y);
-	// Cast occupancy grid to int vector
-    std::vector<int> grid(oG.data.begin(), oG.data.end());
-	map = new AStar::Map(oG.info.height, oG.info.width, grid, 0, mapOrigin, oG.info.resolution);
-}
-// void readOccupancyGrid(const nav_msgs::OccupancyGrid::ConstPtr& msg) {
-// 	 // Get map origin
-//     AStar::PositionMap mapOrigin(msg->info.origin.position.x, msg->info.origin.position.y);
+// void fillMap() {
+// 	nav_msgs::OccupancyGrid oG = *(ros::topic::waitForMessage<nav_msgs::OccupancyGrid>("map", ros::Duration(10)));
+// 	AStar::PositionMap mapOrigin(oG.info.origin.position.x, oG.info.origin.position.y);
 // 	// Cast occupancy grid to int vector
-//     std::vector<int> grid(msg->data.begin(), msg->data.end());
-// 	map = new AStar::Map(msg->info.height, msg->info.width, grid, 0, mapOrigin, msg->info.resolution);
+//     std::vector<int> grid(oG.data.begin(), oG.data.end());
+// 	map = new AStar::Map(oG.info.height, oG.info.width, grid, 0, mapOrigin, oG.info.resolution);
 // }
