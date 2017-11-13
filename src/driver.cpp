@@ -15,8 +15,12 @@ tf::TransformListener *listener;
 // AStar::Map *map = nullptr;
 int indexas = 0;
 DrivingMode drivingMode = DrivingMode::normal;
-geometry_msgs::Point robotPose, lastObsticle;
+geometry_msgs::Point robotPose, lastObsticle, drivingModeTransferPoint;
 #define robot_width 0.1
+#define robot_hypo 0.14
+#define random_number 0.4
+#define treshold 0.5
+
 
 bool closeObsticleOnLeft = false;
 
@@ -117,15 +121,7 @@ int main(int argc, char **argv) {
 void normalDrive(double rotationDelta, double distance) {
 	geometry_msgs::Twist twist;
 	double absoluteRotation = fabs(rotationDelta);
-
-	// IF YOU HAVE CLOSE OBSTICLE ON RIGHT 
-	// AND YOU  WANT TO DO ROTATION 
-	// MOVE 0.1 FRONT AND DO SMALL ROTATION TO LEFT
-
-	// IF YOU HAVE CLOSE OBSTILE ON LEFT 
-	// AND YOU WANT TO DO ROATION
-	// MOVE 0.1 FRONT AND DO SMALL ROTATION TO RIGHT
-
+	
 	// Adjust rotation
 	if(rotationDelta > M_PI) {
 		rotationDelta -= M_PI * 2;
@@ -133,15 +129,23 @@ void normalDrive(double rotationDelta, double distance) {
 		rotationDelta += M_PI * 2;
 	}
 
-	if(absoluteRotation >= 0.3 && !obsticleLeft && !obsticleRight) {
+	double xDelta = robotPose.x - drivingModeTransferPoint.x;
+	double yDelta = robotPose.y - drivingModeTransferPoint.y;
+	double distanceFromLastObsticle = sqrt(xDelta * xDelta + yDelta * yDelta);
+	std::cout << "distance from ob" << distanceFromLastObsticle << std::endl;
+	std::cout << "obsticle dist x" << drivingModeTransferPoint.x << "y:" << drivingModeTransferPoint.y << std::endl;
+	std::cout << "YDELATA " << yDelta << std::endl;
+	if(absoluteRotation >= 0.3 && !obsticleLeft && !obsticleRight && distanceFromLastObsticle >= treshold) {
 		twist.angular.z = (rotationDelta < 0) ? -0.3 : 0.3;
-	} else if (absoluteRotation >= 0.2 && !obsticleLeft && !obsticleRight) {
+	} else if (absoluteRotation >= 0.2 && !obsticleLeft && !obsticleRight && distanceFromLastObsticle >= treshold) {
 		twist.angular.z = (rotationDelta < 0) ? -0.2 : 0.2;
-	} else if (absoluteRotation >= 0.1 && !obsticleLeft && !obsticleRight) {
+	} else if (absoluteRotation >= 0.1 && !obsticleLeft && !obsticleRight && distanceFromLastObsticle >= treshold) {
+		std::cout << "ROBOT HYPO" << std::endl;
 		twist.angular.z = (rotationDelta < 0) ? -0.1 : 0.1;
 	} else if (absoluteRotation >= 0.1) {
+		std::cout << "EVADING OBSTICLE" << std::endl;
 		twist.angular.z = (rotationDelta < 0) ? -0.05 : 0.05;
-		twist.linear.x = 0.1;
+		twist.linear.x = 0.05;
 	} else {
 		if(distance >= 0.3) {
 			twist.linear.x = 0.3;
@@ -250,7 +254,6 @@ geometry_msgs::Point transformPoint( geometry_msgs::Point point,
 
 // TODO: Refactor to robot size
 #define robot_height 0.1
-#define robot_hypo 0.14
 void laserscanCallback(const sensor_msgs::LaserScan& msg) {
 	float start_angle = msg.angle_min;
 	float increment = msg.angle_increment;
@@ -302,17 +305,9 @@ void laserscanCallback(const sensor_msgs::LaserScan& msg) {
 		drivingMode = DrivingMode::narrow;
 	} else if (drivingMode == DrivingMode::narrow){
 		std::cout << "changin mode to normal" << std::endl;
+		drivingModeTransferPoint = robotPose;
 		drivingMode = DrivingMode::normal;
 	}
 	// closeObsticleOnLeft = (obsticleLeft > 0);
 	// closeObsticleOnRight = (obsticlesOnRight > 0);
 }
-
-
-// void fillMap() {
-// 	nav_msgs::OccupancyGrid oG = *(ros::topic::waitForMessage<nav_msgs::OccupancyGrid>("map", ros::Duration(10)));
-// 	AStar::PositionMap mapOrigin(oG.info.origin.position.x, oG.info.origin.position.y);
-// 	// Cast occupancy grid to int vector
-//     std::vector<int> grid(oG.data.begin(), oG.data.end());
-// 	map = new AStar::Map(oG.info.height, oG.info.width, grid, 0, mapOrigin, oG.info.resolution);
-// }
