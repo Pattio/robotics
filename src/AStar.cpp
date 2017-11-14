@@ -53,8 +53,6 @@ Map::Map(int height, int width, std::vector<int> data, int emptyCell, PositionMa
 {
     // Reserve space in vector for 2d array
     mapVector.resize(height);
-    //    for(int i = 0; i < height; i++)
-    //        mapVector.at(i).resize(width);
     
     // Transform 1d array into 2d
     for(int i = 0; i < height * width; i++) {

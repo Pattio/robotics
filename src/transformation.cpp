@@ -9,32 +9,13 @@
 #include <visualization_msgs/MarkerArray.h>
 #include <marker.hpp>
 
-geometry_msgs::Pose realPose;
-geometry_msgs::Pose odomPose;
+geometry_msgs::Pose realPose, odomPose;
 geometry_msgs::Point mapOrigin;
-visualization_msgs::MarkerArray realPoseMarkers;
-visualization_msgs::MarkerArray odomPoseMarkers;
+visualization_msgs::MarkerArray realPoseMarkers, odomPoseMarkers;
 std::vector<double> robot_start_pose;
 
-void basePoseGroundTruthCallback(const nav_msgs::Odometry::ConstPtr& msg) {
-	static tf::TransformBroadcaster broadcaster;
-	realPose = msg->pose.pose;
-
-	tf::Quaternion quaternion(msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z, msg->pose.pose.orientation.w);
-	tf::Transform transform;
-	transform.setOrigin(tf::Vector3(msg->pose.pose.position.x + fabs(mapOrigin.x), msg->pose.pose.position.y + fabs(mapOrigin.y), msg->pose.pose.position.z + mapOrigin.z));
-	transform.setRotation(quaternion);
-	broadcaster.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "/map", "/real_robot_pose"));
-}
-
-void odometryCallback(const nav_msgs::Odometry::ConstPtr& msg) {
-	odomPose = msg->pose.pose;
-	// Just a sanity check that we got 3 coordinates
-	if(robot_start_pose.size() == 3) {
-		odomPose.position.x += robot_start_pose.at(0);
-		odomPose.position.y += robot_start_pose.at(1);
-	}
-}
+void basePoseGroundTruthCallback(const nav_msgs::Odometry::ConstPtr& msg);
+void odometryCallback(const nav_msgs::Odometry::ConstPtr& msg);
 
 int main(int argc, char **argv) {
 	// Initialize ROS and become ROS node
@@ -65,4 +46,24 @@ int main(int argc, char **argv) {
 		ros::spinOnce();
 		rate.sleep();
 	}
+}
+
+void odometryCallback(const nav_msgs::Odometry::ConstPtr& msg) {
+	odomPose = msg->pose.pose;
+	// Just a sanity check that we got 3 coordinates
+	if(robot_start_pose.size() == 3) {
+		odomPose.position.x += robot_start_pose.at(0);
+		odomPose.position.y += robot_start_pose.at(1);
+	}
+}
+
+void basePoseGroundTruthCallback(const nav_msgs::Odometry::ConstPtr& msg) {
+	static tf::TransformBroadcaster broadcaster;
+	realPose = msg->pose.pose;
+
+	tf::Quaternion quaternion(msg->pose.pose.orientation.x, msg->pose.pose.orientation.y, msg->pose.pose.orientation.z, msg->pose.pose.orientation.w);
+	tf::Transform transform;
+	transform.setOrigin(tf::Vector3(msg->pose.pose.position.x + fabs(mapOrigin.x), msg->pose.pose.position.y + fabs(mapOrigin.y), msg->pose.pose.position.z + mapOrigin.z));
+	transform.setRotation(quaternion);
+	broadcaster.sendTransform(tf::StampedTransform(transform, ros::Time::now(), "/map", "/real_robot_pose"));
 }
