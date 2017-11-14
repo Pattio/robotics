@@ -10,6 +10,9 @@ add_compile_options(-std=c++11)
 find_package(catkin REQUIRED COMPONENTS
   roscpp
   tf
+  OpenCV REQUIRED
+  cv_bridge 
+  image_transport
 )
 
 ## System dependencies are found with CMake's conventions
@@ -117,6 +120,7 @@ catkin_package(
 include_directories(
   include
   ${catkin_INCLUDE_DIRS}
+  ${OpenCV_INCLUDE_DIRS}
 )
 
 ## Declare a C++ library
@@ -218,6 +222,10 @@ add_executable(filtered_base_scan
   src/filtered_base_scan.cpp
 )
 
+add_executable(image_generator 
+  src/image_generator.cpp
+)
+
 target_link_libraries(path_planner
   ${catkin_LIBRARIES}
 )
@@ -234,3 +242,10 @@ target_link_libraries(driver
 target_link_libraries(filtered_base_scan
   ${catkin_LIBRARIES}
 )
+
+target_link_libraries(image_generator
+  ${catkin_LIBRARIES}
+  ${OpenCV_LIBRARIES}
+)
+
+LINK_DIRECTORIES(/usr/local/lib)
