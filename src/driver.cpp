@@ -7,8 +7,7 @@
 #include <sensor_msgs/LaserScan.h>
 
 enum DrivingMode { normal, bug, narrow };
-bool obsticleLeft = false, obsticleRight = false;
-bool closeObsticle = false;
+bool obsticleLeft = false, obsticleRight = false, closeObsticle = false, maxSpeedAllowed;
 ros::Publisher drive_publisher;
 std::vector<geometry_msgs::Point> waypoints;
 tf::TransformListener *listener;
@@ -19,8 +18,6 @@ geometry_msgs::Point robotPose, lastObsticle, drivingModeTransferPoint;
 #define robot_hypo 0.14
 #define treshold 0.5
 
-
-bool closeObsticleOnLeft = false;
 
 // Convienient function for rounding values
 double round(double x);
@@ -132,9 +129,9 @@ void normalDrive(double rotationDelta, double distance) {
 		twist.angular.z = (rotationDelta < 0) ? -0.05 : 0.05;
 		twist.linear.x = 0.05;
 	} else {
-		if(distance >= 0.3) {
+		if(distance >= 0.3 && maxSpeedAllowed) {
 			twist.linear.x = 0.3;
-		} else if(distance >= 0.2) {
+		} else if(distance >= 0.2 && maxSpeedAllowed) {
 			twist.linear.x = 0.2;
 		} else {
 			twist.linear.x = 0.1;
@@ -196,8 +193,8 @@ void narrowDrive(double robotYaw) {
 		rotationDelta += M_PI * 2;
 	}
 
-	if(absoluteRotation >= 0.05) {
-		twist.angular.z = (rotationDelta < 0) ? -0.05 : 0.05;
+	if(absoluteRotation >= 0.02) {
+		twist.angular.z = (rotationDelta < 0) ? -0.02 : 0.02;
 	} else {
 		twist.linear.x = 0.1;
 	}
@@ -242,7 +239,7 @@ void laserscanCallback(const sensor_msgs::LaserScan& msg) {
 	float increment = msg.angle_increment;
 	geometry_msgs::Point normalPoint, transformedPoint;
 	obsticleLeft = false, obsticleRight = false;
-	int safeScans = 0;
+	int safeScans = 0, safeSpeedScans = 0;
 
 	for(auto &range : msg.ranges) {
 		normalPoint.x = range * cos(start_angle);
@@ -257,6 +254,13 @@ void laserscanCallback(const sensor_msgs::LaserScan& msg) {
 			obsticleRight = true;
 		}
 
+		// If there exist obsticle in distance of maxSpeed * 2, disable max speed
+		if(transformedPoint.x < 0.5 && fabs(transformedPoint.y) < robot_width) {
+			maxSpeedAllowed = false;
+			std::cout << "disable max speed" << std::endl;
+		} else {
+			safeSpeedScans++;
+		}
 
 		if(fabs(transformedPoint.y) < (robot_width / 2) && transformedPoint.x < robot_width * 2) {
 			closeObsticle = true;
@@ -271,6 +275,8 @@ void laserscanCallback(const sensor_msgs::LaserScan& msg) {
 		if(closeObsticle == true) lastObsticle = robotPose;
 		closeObsticle = false;
 	}
+
+	maxSpeedAllowed = (safeSpeedScans == 30);
 
 	// If robot has obsticles on both sides change driving mode
 	if(obsticleLeft && obsticleRight) {
