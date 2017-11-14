@@ -5,7 +5,6 @@
 #include <sensor_msgs/image_encodings.h>
 #include <opencv2/imgproc/imgproc.hpp>
 #include <opencv2/highgui/highgui.hpp>
-// #include <opencv2/sfm.hpp>
 
 static const std::string OPENCV_WINDOW = "Image window";
 image_transport::Publisher image_pub_;
@@ -64,10 +63,6 @@ int main(int argc, char **argv) {
 		if(K(0,0) != 0) break;
 		ros::spinOnce();
 	}
-
-	std::cout << K(0,0) << "I'M NICE" << std::endl;
-
-	// cv::sfm::reconstruct(images, Rs_est, ts_est, K, points3d_estimated, true);
 
 
 }
