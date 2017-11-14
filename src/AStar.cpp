@@ -294,7 +294,7 @@ std::vector<Position> AStarAlgorithm::findPath(const Position &startPosition, co
     }
     
     std::vector<Position> path;
-    std::cout << currentNode->costToReach << " and to goal" << currentNode->costToGoal << std::endl;
+    std::cout << "Created path with lenght of: " << currentNode->costToReach << std::endl;
     while (currentNode != nullptr) {
         path.push_back(currentNode->position);
         currentNode = currentNode->parent;
