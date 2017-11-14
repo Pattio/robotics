@@ -216,6 +216,7 @@ add_executable(transformation
 add_executable(driver 
   src/AStar.cpp
 	src/driver.cpp
+  src/geometry.cpp
 )
 
 add_executable(filtered_base_scan 

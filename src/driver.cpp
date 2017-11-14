@@ -5,6 +5,7 @@
 #include <geometry_msgs/PoseArray.h>
 #include <tf/transform_listener.h>
 #include <sensor_msgs/LaserScan.h>
+#include <geometry.hpp>
 
 enum DrivingMode { normal, bug, narrow };
 bool obsticleLeft = false, obsticleRight = false, closeObsticle = false, maxSpeedAllowed;
@@ -14,24 +15,15 @@ tf::TransformListener *listener;
 int indexas = 0;
 DrivingMode drivingMode = DrivingMode::normal;
 geometry_msgs::Point robotPose, lastObsticle, drivingModeTransferPoint;
-#define robot_width 0.1
-#define robot_hypo 0.14
-#define treshold 0.5
 
-
-// Convienient function for rounding values
-double round(double x);
-// Function to calculate angle between target and robot
-double angle(double currentX, double currentY, double targetX, double targetY);
 // Callback which receives waypoints which robot needs to visit
 void waypointsCallback(const geometry_msgs::PoseArray::ConstPtr& msg);
+void laserscanCallback(const sensor_msgs::LaserScan& msg);
 // Transform function which transforms point from one frame to another
 geometry_msgs::Point transformPoint(geometry_msgs::Point point, std::string baseFrame, std::string targetFrame);
-// Laser scan callback
-void laserscanCallback(const sensor_msgs::LaserScan& msg);
 // Driving options
 void normalDrive(double rotationDelta, double distance);
-void bugDrive(geometry_msgs::Point targetPoint);
+void bugDrive(geometry_msgs::Point targetPoint, double robotYaw);
 void narrowDrive(double robotYaw);
 
 int main(int argc, char **argv) {
@@ -50,7 +42,7 @@ int main(int argc, char **argv) {
 
 	// Variables outside while loop for optimization
 	double distance, robotYaw, targetAngle, rotationDelta;
-
+	ros::Rate rate(100);
 	while(ros::ok()) {
 		ros::spinOnce();
 
@@ -69,7 +61,6 @@ int main(int argc, char **argv) {
 		// If you are at current target waypoint add next waypoint
 		if(distance <= 0.1) indexas += 1;
 
-
 		try {
 			// Using transform find robot location and yaw regarding map frame
 			listener->lookupTransform("map", "real_robot_pose", ros::Time(0), transform);
@@ -85,7 +76,7 @@ int main(int argc, char **argv) {
 					normalDrive(rotationDelta, distance);
 				break;
 				case DrivingMode::bug:
-					bugDrive(targetPoint);
+					bugDrive(targetPoint, robotYaw);
 				break;
 				case DrivingMode::narrow:
 					narrowDrive(robotYaw);
@@ -97,6 +88,7 @@ int main(int argc, char **argv) {
 			ROS_ERROR("%s",ex.what());
 			ros::Duration(1.0).sleep();
 		}
+		rate.sleep();
 	}
 }
 
@@ -140,21 +132,15 @@ void normalDrive(double rotationDelta, double distance) {
 	drive_publisher.publish(twist);
 }
 
-void bugDrive(geometry_msgs::Point targetPoint) {
+void bugDrive(geometry_msgs::Point targetPoint, double robotYaw) {
 	geometry_msgs::Twist twist;
 
+	FacingDirection direction = getDirection(robotYaw);
 	// If there is an obsticle rotate till you face obsticle with your side
 	// then move forward while obstile is on your side
 	if(closeObsticle) {
 		twist.angular.z = -0.1;
-	} else if (robotPose.x - robot_width * 3 < lastObsticle.x && robotPose.y - robot_width < lastObsticle.y) {
-		// There is a bug if lastObsticle is on the right of the map
-		// but robot is going to left of the map robot will continue going straigh
-		// without stoping, possible fix is to check with side of the map robot is facing and if robot is facing left map -pi then check 
-		// if robotPose.x <= lasObsticle.x - robot_WIDTH
-		std::cout << "OBSTICLE WAS AT x" << lastObsticle.x << "and y: " << lastObsticle.y << std::endl;
-		std::cout << "ROBOT POSE IS AT x" << robotPose.x << " and y:" << robotPose.y << std::endl;
-		std::cout << "bug wants to go straight" << std::endl;
+	} else if(((direction == FacingDirection::north || direction == FacingDirection::east) && (robotPose.x - robot_width * 3 < lastObsticle.x && robotPose.y - robot_width < lastObsticle.y)) ||  ((direction == FacingDirection::west || direction == FacingDirection::south) && (robotPose.y - robot_width < lastObsticle.y && robotPose.x + robot_width * 3 < lastObsticle.x))) {
 		twist.linear.x = 0.1;
 	} else {
 		drivingMode = DrivingMode::normal;
@@ -168,19 +154,20 @@ void narrowDrive(double robotYaw) {
 	double target;
 
 	// Find which way robot is heading and calibrate robot to move close between obsticles
-	if((robotYaw >= 0 && robotYaw <= M_PI / 4) || (robotYaw < 0 && robotYaw >= -M_PI / 4)) {
-		std::cout << "adjust to east" << std::endl;
-		target = 0;
-	} else if((robotYaw > M_PI / 4 && robotYaw <= M_PI / 2) || (robotYaw >= M_PI / 2 && robotYaw < M_PI * 3 / 4)) {
-		std::cout << "adjust to north" << std::endl;
-		target = M_PI / 2;
-	} else if((robotYaw < -M_PI / 4 && robotYaw >= -M_PI / 2) || (robotYaw < -M_PI / 2 && robotYaw > -M_PI * 3 / 4)) {
-		std::cout << "adjust to south" << std::endl;
-		target = -M_PI / 2;
-	} else {
-		// adjust west
-		std::cout << "adjust to west" << std::endl;
-		target = -M_PI;
+	FacingDirection direction = getDirection(robotYaw);
+	switch(direction) {
+		case FacingDirection::east:
+			target = 0;
+		break;
+		case FacingDirection::north:
+			target = M_PI / 2;
+		break;
+		case FacingDirection::south:
+			target = -M_PI / 2;
+		break;
+		case FacingDirection::west:
+			target = -M_PI;
+		break;
 	}
 
 	double rotationDelta = target - robotYaw;
@@ -205,14 +192,8 @@ void waypointsCallback(const geometry_msgs::PoseArray::ConstPtr& msg) {
 	std::vector<geometry_msgs::Pose> poses = msg->poses;
 	waypoints.clear();
 	for(auto &pose : poses) {
-		std::cout << pose.position.x << " " << pose.position.y << std::endl;
 		waypoints.push_back(pose.position);
 	}
-}
-
-double round(double x) { return floor(x * 100 + 0.5) / 100; }
-double angle(double currentX, double currentY, double targetX, double targetY) {
-	return atan2(round(targetY) - round(currentY), round(targetX) - round(currentX));
 }
 
 geometry_msgs::Point transformPoint( geometry_msgs::Point point, 
@@ -232,8 +213,6 @@ geometry_msgs::Point transformPoint( geometry_msgs::Point point,
 	}
 }
 
-// TODO: Refactor to robot size
-#define robot_height 0.1
 void laserscanCallback(const sensor_msgs::LaserScan& msg) {
 	float start_angle = msg.angle_min;
 	float increment = msg.angle_increment;
@@ -257,7 +236,6 @@ void laserscanCallback(const sensor_msgs::LaserScan& msg) {
 		// If there exist obsticle in distance of maxSpeed * 2, disable max speed
 		if(transformedPoint.x < 0.5 && fabs(transformedPoint.y) < robot_width) {
 			maxSpeedAllowed = false;
-			std::cout << "disable max speed" << std::endl;
 		} else {
 			safeSpeedScans++;
 		}
