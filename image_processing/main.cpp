@@ -23,13 +23,13 @@ int main(int argc, char *argv[])
         "temple0001.png", "temple0002.png", "temple0003.png", "temple0004.png", "temple0005.png"
     };*/
 
-    // Instrinsics matrix from ros /camera info
-    cv::Matx33d instrinsicsMatrix = cv::Matx33d(228.50368107873834, 0, 160.0, 0, 274.7477419454622, 100.0, 0, 0,  1);
-    //cv::Matx33d instrinsicsTemple = cv::Matx33d(1520.4, 0, 302.32, 0, 1525.9, 246.87, 0, 0, 1);
+    // Intrinsics matrix from ros /camera info
+    cv::Matx33d intrinsicsMatrix = cv::Matx33d(228.50368107873834, 0, 160.0, 0, 274.7477419454622, 100.0, 0, 0,  1);
+    //cv::Matx33d intrinsicsTemple = cv::Matx33d(1520.4, 0, 302.32, 0, 1525.9, 246.87, 0, 0, 1);
     std::vector<cv::Mat> cameraRotations, cameraTranslations, points3D;
 
     // Perform reconstruction to get 3d points from 2d images
-    cv::sfm::reconstruct(images, cameraRotations, cameraTranslations, instrinsicsMatrix, points3D, true);
+    cv::sfm::reconstruct(images, cameraRotations, cameraTranslations, intrinsicsMatrix, points3D, true);
 
     // Create 3d visualizer window
     cv::viz::Viz3d window("Visualizer");
